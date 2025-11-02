@@ -135,13 +135,6 @@ func (c *Collector) buildLabels(ifaceName string) prometheus.Labels {
 		"interface": ifaceName,
 	}
 
-	// Add custom labels from config
-	if customLabels, exists := c.cfg.InterfaceLabels[ifaceName]; exists {
-		for k, v := range customLabels {
-			labels[k] = v
-		}
-	}
-
 	return labels
 }
 
@@ -185,13 +178,6 @@ func (c *Collector) buildPeerLabels(ifaceName string, peer Peer) prometheus.Labe
 		peerLabel = peer.DisplayName
 	}
 	labels["peer"] = peerLabel
-
-	// Add custom labels from config
-	if customLabels, exists := c.cfg.InterfaceLabels[ifaceName]; exists {
-		for k, v := range customLabels {
-			labels[k] = v
-		}
-	}
 
 	return labels
 }

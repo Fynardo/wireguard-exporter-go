@@ -84,12 +84,6 @@ If config file reading is disabled or a display name is not found, the public ke
   "config_file_paths": {
     "wg0": "/etc/wireguard/wg0.conf",
     "wg1": "/custom/path/to/wg1.conf"
-  },
-  "interface_labels": {
-    "wg0": {
-      "location": "datacenter1",
-      "environment": "production"
-    }
   }
 }
 ```
