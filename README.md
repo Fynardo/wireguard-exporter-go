@@ -7,7 +7,7 @@ A Prometheus metrics exporter for WireGuard VPN interfaces, written in Go.
 - Discovers all WireGuard interfaces automatically
 - Filters interfaces using a deny-list
 - Exports comprehensive metrics for interfaces and peers
-- **Human-friendly peer names** - Uses display names from WireGuard config files instead of public keys in metrics labels
+- Human-friendly peer names - Uses display names from WireGuard config files instead of public keys in metrics labels
 - Supports configuration via CLI flags, environment variables, or config file (with priority: CLI > ENV > file)
 - Secure by design - never exposes private keys or sensitive data
 
@@ -30,7 +30,7 @@ All peer-level metrics use a `peer` label that contains either:
 
 ## Display Names
 
-**Disclaimer**: I saw this technique in another repo that parsed the Wireguard config files, so I'm sorry I cannot give proper kudos.
+**Disclaimer**: I saw this technique in another repo that parsed the Wireguard config files but don't remember where exactly, so I'm sorry I cannot give proper kudos.
 
 The exporter can read display names from WireGuard config files to use human-friendly names in metrics instead of public keys. To enable this, add a `# display-name = <name>` comment in each `[Peer]` block of your WireGuard config file:
 
@@ -41,12 +41,12 @@ PublicKey = <whatever_public_key>
 AllowedIPs = <whatever_ip_range>
 ```
 
+You probably want to use a display name that is prometheus label friendly.
+
 You can use either `display-name` or `display_name` format. The exporter will:
 1. Read the config file at `/etc/wireguard/<interface>.conf` by default
 2. Match peers by their public key
 3. Use the display name in the `peer` label for all metrics
-
-You probably want to use a display name that is prometheus label friendly.
 
 If config file reading is disabled or a display name is not found, the public key is used as the label value.
 
@@ -102,6 +102,8 @@ If config file reading is disabled or a display name is not found, the public ke
 Configuration priority: CLI flags > Environment variables > Config file
 
 ## Usage
+
+**Note**: Running the `wg` command requires privileges, so you may need to run the app as `sudo`
 
 ### Basic Usage
 
