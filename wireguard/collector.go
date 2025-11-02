@@ -1,7 +1,9 @@
 package wireguard
 
 import (
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 	"wireguard-exporter-go/config"
 	"wireguard-exporter-go/metrics"
@@ -58,6 +60,11 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 		if err != nil {
 			slog.Error("Failed to parse interface data", "interface", ifaceName, "error", err)
 			continue
+		}
+
+		// Load display names from config file if enabled
+		if c.cfg.ReadConfigFiles {
+			c.loadDisplayNames(iface, ifaceName)
 		}
 
 		// Build label map for this interface
@@ -138,12 +145,46 @@ func (c *Collector) buildLabels(ifaceName string) prometheus.Labels {
 	return labels
 }
 
+// load display names from WireGuard config files
+func (c *Collector) loadDisplayNames(iface *Interface, ifaceName string) {
+	// Determine config file path
+	configPath := ""
+	if path, exists := c.cfg.ConfigFilePaths[ifaceName]; exists {
+		configPath = path
+	} else {
+		// Default to /etc/wireguard/<interface>.conf
+		configPath = fmt.Sprintf("/etc/wireguard/%s.conf", ifaceName)
+	}
+
+	// Parse config file to get display names
+	displayNames, err := ParseWireGuardConfigFile(configPath)
+	if err != nil {
+		slog.Debug("Failed to parse config file for display names", "interface", ifaceName, "path", configPath, "error", err)
+		return
+	}
+
+	// Update peers with display names
+	for i := range iface.Peers {
+		if displayName, exists := displayNames[iface.Peers[i].PublicKey]; exists {
+			iface.Peers[i].DisplayName = strings.ToLower(displayName)
+			slog.Debug("Loaded display name for peer", "interface", ifaceName, "public_key", iface.Peers[i].PublicKey, "display_name", displayName)
+		}
+	}
+}
+
 // Build a label map for peer-level metrics
 func (c *Collector) buildPeerLabels(ifaceName string, peer Peer) prometheus.Labels {
 	labels := prometheus.Labels{
 		"interface":       ifaceName,
-		"peer_public_key": peer.PublicKey,
+		"peer": peer.PublicKey,
 	}
+
+	// Use display name if available, otherwise fallback to public key
+	peerLabel := peer.PublicKey
+	if peer.DisplayName != "" {
+		peerLabel = peer.DisplayName
+	}
+	labels["peer"] = peerLabel
 
 	// Add custom labels from config
 	if customLabels, exists := c.cfg.InterfaceLabels[ifaceName]; exists {

@@ -19,7 +19,7 @@ var (
 			Name: "wireguard_peer_latest_handshake_seconds",
 			Help: "Unix timestamp of the latest handshake per peer",
 		},
-		[]string{"interface", "peer_public_key"},
+		[]string{"interface", "peer"},
 	)
 
 	PeerHandshakeAgeSeconds = prometheus.NewGaugeVec(
@@ -27,7 +27,7 @@ var (
 			Name: "wireguard_peer_handshake_age_seconds",
 			Help: "Age in seconds of the latest handshake per peer",
 		},
-		[]string{"interface", "peer_public_key"},
+		[]string{"interface", "peer"},
 	)
 
 	// Note: Using gauge instead of counter since WireGuard provides absolute values
@@ -36,7 +36,7 @@ var (
 			Name: "wireguard_peer_bytes_sent",
 			Help: "Total bytes sent to peer",
 		},
-		[]string{"interface", "peer_public_key"},
+		[]string{"interface", "peer"},
 	)
 
 	// Note: Using gauge instead of counter since WireGuard provides absolute values
@@ -45,7 +45,7 @@ var (
 			Name: "wireguard_peer_bytes_received",
 			Help: "Total bytes received from peer",
 		},
-		[]string{"interface", "peer_public_key"},
+		[]string{"interface", "peer"},
 	)
 
 	InterfaceListeningPort = prometheus.NewGaugeVec(
@@ -61,7 +61,7 @@ var (
 			Name: "wireguard_peer_endpoint",
 			Help: "Peer endpoint information (1 if endpoint exists, 0 otherwise)",
 		},
-		[]string{"interface", "peer_public_key", "endpoint"},
+		[]string{"interface", "peer", "endpoint"},
 	)
 
 	PeerAllowedIPsCount = prometheus.NewGaugeVec(
@@ -69,7 +69,7 @@ var (
 			Name: "wireguard_peer_allowed_ips_count",
 			Help: "Number of allowed IPs per peer",
 		},
-		[]string{"interface", "peer_public_key"},
+		[]string{"interface", "peer"},
 	)
 )
 

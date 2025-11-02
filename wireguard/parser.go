@@ -4,22 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-)
-
-var (
-	// Regex patterns for parsing wg show output
-	interfacePattern = regexp.MustCompile(`^interface:\s+(.+)$`)
-	listeningPortPattern = regexp.MustCompile(`^listening\s+port:\s+(\d+)$`)
-	peerPattern = regexp.MustCompile(`^peer:\s+(.+)$`)
-	endpointPattern = regexp.MustCompile(`^endpoint:\s+(.+)$`)
-	allowedIPsPattern = regexp.MustCompile(`^allowed\s+ips:\s+(.+)$`)
-	handshakePattern = regexp.MustCompile(`^latest\s+handshake:\s+(.+)$`)
-	transferPattern = regexp.MustCompile(`^transfer:\s+(.+)$`)
 )
 
 func ParseInterfaceData(wgCommandPath, interfaceName string) (*Interface, error) {
@@ -40,8 +30,8 @@ func ParseInterfaceData(wgCommandPath, interfaceName string) (*Interface, error)
 	outputStr := string(output)
 
 	// Parse the dump format which is tab-separated
-	// Format: <interface public key> <listening port> <fwmark>
-	// Format per peer: <public key> <endpoint> <allowed ips> <last handshake> <rx bytes> <tx bytes> <persistent keepalive>
+	// Format: <interface private key> <interface public key> <listening port> <fwmark>
+	// Format per peer: <public key> "(none)" <endpoint> <allowed ips> <last handshake> <rx bytes> <tx bytes> <persistent keepalive>
 	
 	dumpLines := strings.Split(strings.TrimSpace(outputStr), "\n")
 	if len(dumpLines) == 0 {
@@ -50,20 +40,20 @@ func ParseInterfaceData(wgCommandPath, interfaceName string) (*Interface, error)
 
 	// First line is the interface
 	interfaceParts := strings.Fields(dumpLines[0])
-	if len(interfaceParts) < 2 {
+	if len(interfaceParts) < 4 {
 		return nil, fmt.Errorf("invalid interface dump format")
 	}
 
 	iface := &Interface{
 		Name:         interfaceName,
-		PublicKey:    interfaceParts[0],
+		PublicKey:    interfaceParts[1],
 		ListeningPort: 0,
 		Peers:        []Peer{},
 	}
 
 	// Parse listening port
 	if len(interfaceParts) >= 2 {
-		if port, err := strconv.Atoi(interfaceParts[1]); err == nil {
+		if port, err := strconv.Atoi(interfaceParts[2]); err == nil {
 			iface.ListeningPort = port
 		}
 	}
@@ -73,7 +63,7 @@ func ParseInterfaceData(wgCommandPath, interfaceName string) (*Interface, error)
 	// Remaining lines are peers
 	for i := 1; i < len(dumpLines); i++ {
 		peerParts := strings.Fields(dumpLines[i])
-		if len(peerParts) < 1 {
+		if len(peerParts) < 7 {
 			continue
 		}
 
@@ -87,37 +77,31 @@ func ParseInterfaceData(wgCommandPath, interfaceName string) (*Interface, error)
 		}
 
 		// Parse endpoint (can be empty)
-		if len(peerParts) >= 2 && peerParts[1] != "(none)" {
-			peer.Endpoint = peerParts[1]
+		if peerParts[2] != "(none)" {
+			peer.Endpoint = peerParts[2]
 		}
 
 		// Parse allowed IPs
-		if len(peerParts) >= 3 {
-			allowedIPs := strings.Split(peerParts[2], ",")
-			for _, ip := range allowedIPs {
-				peer.AllowedIPs = append(peer.AllowedIPs, strings.TrimSpace(ip))
-			}
+		allowedIPs := strings.Split(peerParts[3], ",")
+		for _, ip := range allowedIPs {
+			peer.AllowedIPs = append(peer.AllowedIPs, strings.TrimSpace(ip))
 		}
 
 		// Parse latest handshake (Unix timestamp)
-		if len(peerParts) >= 4 && peerParts[3] != "0" {
-			if timestamp, err := strconv.ParseInt(peerParts[3], 10, 64); err == nil && timestamp > 0 {
+		if peerParts[4] != "0" {
+			if timestamp, err := strconv.ParseInt(peerParts[4], 10, 64); err == nil && timestamp > 0 {
 				peer.LatestHandshake = time.Unix(timestamp, 0)
 			}
 		}
 
 		// Parse received bytes
-		if len(peerParts) >= 5 {
-			if bytes, err := strconv.ParseUint(peerParts[4], 10, 64); err == nil {
-				peer.BytesReceived = bytes
-			}
+		if bytes, err := strconv.ParseUint(peerParts[5], 10, 64); err == nil {
+			peer.BytesReceived = bytes
 		}
 
 		// Parse sent bytes
-		if len(peerParts) >= 6 {
-			if bytes, err := strconv.ParseUint(peerParts[5], 10, 64); err == nil {
-				peer.BytesSent = bytes
-			}
+		if bytes, err := strconv.ParseUint(peerParts[6], 10, 64); err == nil {
+			peer.BytesSent = bytes
 		}
 
 		slog.Debug("Parsed peer data", "interface", interfaceName, "peer", peer)
@@ -128,95 +112,87 @@ func ParseInterfaceData(wgCommandPath, interfaceName string) (*Interface, error)
 	return iface, nil
 }
 
-func ParseHandshakeTime(timeStr string) (time.Time, int64, error) {
-	// Remove "ago" suffix
-	timeStr = strings.TrimSuffix(strings.ToLower(timeStr), " ago")
-	timeStr = strings.TrimSpace(timeStr)
-
-	var totalDuration time.Duration
-
-	// Parse days
-	if days := regexp.MustCompile(`(\d+)\s+day`).FindStringSubmatch(timeStr); days != nil {
-		if d, err := strconv.Atoi(days[1]); err == nil {
-			totalDuration += time.Duration(d) * 24 * time.Hour
-		}
-	}
-
-	// Parse hours
-	if hours := regexp.MustCompile(`(\d+)\s+hour`).FindStringSubmatch(timeStr); hours != nil {
-		if h, err := strconv.Atoi(hours[1]); err == nil {
-			totalDuration += time.Duration(h) * time.Hour
-		}
-	}
-
-	// Parse minutes
-	if minutes := regexp.MustCompile(`(\d+)\s+minute`).FindStringSubmatch(timeStr); minutes != nil {
-		if m, err := strconv.Atoi(minutes[1]); err == nil {
-			totalDuration += time.Duration(m) * time.Minute
-		}
-	}
-
-	// Parse seconds
-	if seconds := regexp.MustCompile(`(\d+)\s+second`).FindStringSubmatch(timeStr); seconds != nil {
-		if s, err := strconv.Atoi(seconds[1]); err == nil {
-			totalDuration += time.Duration(s) * time.Second
-		}
-	}
-
-	handshakeTime := time.Now().Add(-totalDuration)
-	ageSeconds := int64(totalDuration.Seconds())
-
-	return handshakeTime, ageSeconds, nil
-}
-
-func ParseTransferStats(transferStr string) (uint64, uint64, error) {
-	// This is a fallback for non-dump format. The dump format already provides bytes directly.
-	// But we'll implement this in case we need to parse the human-readable format
-	var received, sent uint64
-	var err error
-
-	receivedPattern := regexp.MustCompile(`([\d.]+)\s+([KMGT]?i?B)\s+received`)
-	sentPattern := regexp.MustCompile(`([\d.]+)\s+([KMGT]?i?B)\s+sent`)
-
-	if match := receivedPattern.FindStringSubmatch(strings.ToLower(transferStr)); match != nil {
-		received, err = parseSize(match[1], match[2])
-		if err != nil {
-			return 0, 0, err
-		}
-	}
-
-	if match := sentPattern.FindStringSubmatch(strings.ToLower(transferStr)); match != nil {
-		sent, err = parseSize(match[1], match[2])
-		if err != nil {
-			return 0, 0, err
-		}
-	}
-
-	return received, sent, nil
-}
-
-func parseSize(valueStr, unit string) (uint64, error) {
-	value, err := strconv.ParseFloat(valueStr, 64)
+// ParseWireGuardConfigFile parses a WireGuard config file and extracts display names
+// mapped by public key. Returns a map of public key -> display name.
+func ParseWireGuardConfigFile(configPath string) (map[string]string, error) {
+	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return 0, err
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	var multiplier uint64 = 1
-	switch strings.ToUpper(unit) {
-	case "B":
-		multiplier = 1
-	case "KB", "KIB":
-		multiplier = 1024
-	case "MB", "MIB":
-		multiplier = 1024 * 1024
-	case "GB", "GIB":
-		multiplier = 1024 * 1024 * 1024
-	case "TB", "TIB":
-		multiplier = 1024 * 1024 * 1024 * 1024
-	default:
-		return 0, fmt.Errorf("unknown unit: %s", unit)
+	displayNames := make(map[string]string)
+	lines := strings.Split(string(data), "\n")
+	
+	var inPeerSection bool
+	var currentPublicKey string
+	var currentDisplayName string
+	
+	// Regex to match "# display-name = <value>" or "#display-name = <value>" (with or without space after #)
+	// Supports both "display-name" and "display_name" formats
+	displayNameRegex := regexp.MustCompile(`(?i)^\s*#\s*display[-_]name\s*=\s*(.+)$`)
+	// Regex to match "PublicKey = <value>"
+	publicKeyRegex := regexp.MustCompile(`(?i)^\s*PublicKey\s*=\s*(.+)$`)
+	
+	for _, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+		
+		// Check if we're entering a [Peer] section
+		if strings.HasPrefix(trimmedLine, "[Peer]") {
+			// If we were in a previous peer section and found a display name, save it
+			if inPeerSection && currentPublicKey != "" && currentDisplayName != "" {
+				displayNames[currentPublicKey] = currentDisplayName
+			}
+			
+			inPeerSection = true
+			currentPublicKey = ""
+			currentDisplayName = ""
+			continue
+		}
+		
+		// Check if we're leaving the peer section (entering another section)
+		if strings.HasPrefix(trimmedLine, "[") && trimmedLine != "[Peer]" {
+			// Save any display name we found before leaving
+			if currentPublicKey != "" && currentDisplayName != "" {
+				displayNames[currentPublicKey] = currentDisplayName
+			}
+			inPeerSection = false
+			currentPublicKey = ""
+			currentDisplayName = ""
+			continue
+		}
+		
+		if inPeerSection {
+			// Check for display-name comment
+			if matches := displayNameRegex.FindStringSubmatch(trimmedLine); matches != nil {
+				displayName := strings.TrimSpace(matches[1])
+				if displayName != "" {
+					currentDisplayName = displayName
+					// If we already have the public key, save immediately
+					if currentPublicKey != "" {
+						displayNames[currentPublicKey] = displayName
+					}
+				}
+			}
+			
+			// Check for PublicKey
+			if matches := publicKeyRegex.FindStringSubmatch(trimmedLine); matches != nil {
+				publicKey := strings.TrimSpace(matches[1])
+				if publicKey != "" {
+					currentPublicKey = publicKey
+					// If we already have the display name, save immediately
+					if currentDisplayName != "" {
+						displayNames[publicKey] = currentDisplayName
+					}
+				}
+			}
+		}
 	}
-
-	return uint64(value * float64(multiplier)), nil
+	
+	// Handle the last peer section if we ended in one
+	if inPeerSection && currentPublicKey != "" && currentDisplayName != "" {
+		displayNames[currentPublicKey] = currentDisplayName
+	}
+	
+	slog.Debug("Parsed config file", "path", configPath, "display_names_count", len(displayNames))
+	return displayNames, nil
 }
-

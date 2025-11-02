@@ -22,12 +22,14 @@ func LoadConfig() (*Config, error) {
 	var metricsPath string
 	var wgCommandPath string
 	var showEndpoints bool
+	var readConfigFiles bool
 	
 	flag.StringVar(&denylist, "interfaces-denylist", "", "Comma-separated list of interfaces to exclude (overrides config file and env)")
 	flag.StringVar(&listenAddr, "listen-address", "", "Address to listen on for metrics endpoint (overrides config file and env)")
 	flag.StringVar(&metricsPath, "metrics-path", "", "Path for metrics endpoint (overrides config file and env)")
 	flag.StringVar(&wgCommandPath, "wg-command-path", "", "Path to wg command (overrides config file and env)")
 	flag.BoolVar(&showEndpoints, "show-endpoints", false, "Show peer endpoints in metrics (overrides config file and env)")
+	flag.BoolVar(&readConfigFiles, "read-config-files", true, "Enable reading WireGuard config files for display names (overrides config file and env)")
 
 	flag.Parse()
 
@@ -57,10 +59,13 @@ func LoadConfig() (*Config, error) {
 			cfg.WGCommandPath = wgCommandPath
 		case "show-endpoints":
 			cfg.ShowEndpoints = showEndpoints
+		case "read-config-files":
+			cfg.ReadConfigFiles = readConfigFiles
 		}
 	})
 
 	slog.Info("Configuration loaded", "listen_address", cfg.ListenAddress, "metrics_path", cfg.MetricsPath)
+	slog.Debug("Full Configuration dump", "config", cfg)
 	return cfg, nil
 }
 
@@ -92,7 +97,11 @@ func loadFromEnv(cfg *Config) {
 	if val := os.Getenv("WG_SHOW_ENDPOINTS"); val != "" {
 		cfg.ShowEndpoints = strings.ToLower(val) == "true" || val == "1"
 	}
+	if val := os.Getenv("WG_READ_CONFIG_FILES"); val != "" {
+		cfg.ReadConfigFiles = strings.ToLower(val) == "true" || val == "1"
+	}
 	// Interface labels from env would need a specific format, skipping for now
+	// Config file paths would need a specific format, skipping for now
 }
 
 
