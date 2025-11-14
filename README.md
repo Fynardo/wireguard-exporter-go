@@ -1,4 +1,6 @@
 # WireGuard Prometheus Exporter
+![Build Status](https://github.com/Fynardo/wireguard-exporter-go/actions/workflows/ci.yml/badge.svg)
+![Release](https://github.com/Fynardo/wireguard-exporter-go/actions/workflows/main.yml/badge.svg)
 
 A Prometheus metrics exporter for WireGuard VPN interfaces, written in Go.
 
@@ -162,3 +164,4 @@ MIT
 ## Creds
 
 Co-authored by Claude via Cursor (I know you already noticed)
+
