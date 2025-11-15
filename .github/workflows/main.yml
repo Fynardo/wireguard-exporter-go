@@ -23,9 +23,14 @@ jobs:
       - name: Build binaries
         run: |
           mkdir -p dist
-          GOOS=linux GOARCH=amd64 go build -o dist/wireguard-exporter-go .
-          tar -czvf dist/wireguard-exporter-go-linux-amd64.tar.gz dist/wireguard-exporter-go
-          rm dist/wireguard-exporter-go
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$GITHUB_REF_NAME" -o wireguard-exporter-go .
+          tar -czvf dist/wireguard-exporter-go-$GITHUB_REF_NAME-linux-amd64.tar.gz wireguard-exporter-go LICENSE README.md
+          rm wireguard-exporter-go
+
+          # Generate SHA256 checksums
+          cd dist
+          sha256sum * > SHA256SUMS
+          cd ..
           
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
