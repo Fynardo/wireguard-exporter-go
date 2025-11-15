@@ -20,12 +20,21 @@ jobs:
         with:
           go-version: "1.21"
 
+      - name: Get version from tag
+        id: vars
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+
       - name: Build binaries
         run: |
           mkdir -p dist
-          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$GITHUB_REF_NAME" -o wireguard-exporter-go .
-          tar -czvf dist/wireguard-exporter-go-$GITHUB_REF_NAME-linux-amd64.tar.gz wireguard-exporter-go LICENSE README.md
-          rm wireguard-exporter-go
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$VERSION" -o wireguard-exporter-go .
+          
+          mkdir wireguard-exporter-go-$VERSION
+          cp wireguard-exporter-go wireguard-exporter-go-$VERSION/
+          cp LICENSE README.md wireguard-exporter-go-$VERSION/
+
+          tar -czvf dist/wireguard-exporter-go-$VERSION-linux-amd64.tar.gz wireguard-exporter-go-$VERSION
+          rm -r wireguard-exporter-go-$VERSION
 
           # Generate SHA256 checksums
           cd dist
