@@ -24,6 +24,9 @@ jobs:
         run: |
           mkdir -p dist
           GOOS=linux GOARCH=amd64 go build -o dist/wireguard-exporter-go .
+          tar -czvf dist/wireguard-exporter-go-linux-amd64.tar.gz dist/wireguard-exporter-go
+          rm dist/wireguard/exporter-go
+          
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
